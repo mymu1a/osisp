@@ -1,2 +1,2 @@
-build:
-	echo "hello"
+build: main.o
+	gcc -o dirwalk.out $^
