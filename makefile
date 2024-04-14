@@ -1,2 +1,2 @@
-build: main.o
+build: main.o gengetopt/cmdline.o
 	gcc -o dirwalk.out $^

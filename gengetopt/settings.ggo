@@ -1,0 +1,11 @@
+version "0.1"
+package "dirwalk"
+purpose "Lab1 2024 osisp"
+
+args "--unnamed-opts --include-getopt"
+
+# Options
+option "links" l "символические ссылки" flag off
+option "dirs"  d "каталоги" flag off
+option "files" f "файлы" flag off
+option "sort"  s "сортировать выход в соответствии с LC_COLLATE" flag off

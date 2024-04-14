@@ -8,6 +8,9 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "gengetopt/cmdline.h"
+
+
 
 /*
 struct dirent {
@@ -41,11 +44,13 @@ static int eval_realpath(const char* given)
 }
 
 
-int main(void) {
+int main_2(void) {
 
 	eval_realpath("./");
 	eval_realpath("..");
 	eval_realpath("~/osisp");
+	eval_realpath("/home/artur/osisp");
+	eval_realpath("/home/artur/osisp/");
 
 	char buf[PATH_MAX]; /* PATH_MAX incudes the \0 so +1 is not required */
 	char* res = realpath("~/osisp", buf);
@@ -62,58 +67,75 @@ int main(void) {
 	return 0;
 }
 
-int main_1()
-{
-	char pathDir[] = "~/osisp";
-	char pathResolved[PATH_MAX];
 
-	if (realpath(pathDir, pathResolved) == NULL)
+int main(int argc, char** argv)
+{
+	//=== parse command line options ===
+	struct gengetopt_args_info	config;
+
+	if (cmdline_parser(argc, argv, &config) != 0)
+	{
+		exit(1);
+	}
+	bool all_flag = false;
+
+	if (config.links_flag == false && config.dirs_flag == false && config.files_flag == false)
+	{
+		all_flag = true;
+	}
+	//=== open directory stream ===
+	char	pathDir_[] = "./";
+	char*	pathDir = pathDir_;
+	DIR*	pDir;
+
+	pDir = opendir(pathDir);
+	if (pDir == NULL)
 	{
 		printf("\nError: %d (line: %d)\n", errno, __LINE__);
 		return 1;
 	}
-	return 0;
-}
+	//=== print parameters ===
+	bool print_slash = false;
 
-int main_2()
-{
-	printf("hello");
-	char pathDir[] = "~/osisp";
-///	char pathDir[] = "./";
-
-	// pointer to the directory stream
-	DIR*	pDir;
-
-
-	// open a directory stream
-	pDir = opendir(pathDir);
-
-	if (pDir == NULL)
+	if (config.inputs_num > 0)
 	{
-		char* resolved_path = NULL;
+		pathDir = config.inputs[0];
 
-		if (realpath(pathDir, resolved_path) == NULL)
+		size_t size = strlen(pathDir);
+		if (pathDir[size - 1] != '/')
 		{
-			printf("\nError: %d (line: %d)\n", errno, __LINE__);
-			return 1;
-		}
-		pDir = opendir(resolved_path);
-		free(resolved_path);
-
-		if (pDir == NULL)
-		{
-			printf("\nError: %d (line: %d)\n", errno, __LINE__);
-			return 1;
+			print_slash = true;
 		}
 	}
+	//=== loop through the directory stream ===
 	struct dirent* pEntry;
 
 	while (( pEntry = readdir(pDir) ) != NULL)
 	{
+		if (strcmp(pEntry->d_name, ".") == 0 || strcmp(pEntry->d_name, "..") == 0)
+		{
+			continue;
+		}
+		if (pEntry->d_type == DT_DIR && all_flag == false && config.dirs_flag == false)
+		{
+			continue;
+		}
+		if (pEntry->d_type == DT_REG && all_flag == false && config.files_flag == false)
+		{
+			continue;
+		}
+		if (pEntry->d_type == DT_LNK && all_flag == false && config.links_flag == false)
+		{
+			continue;
+		}
+
+		printf("%s", pathDir);
+		if (print_slash == true)
+		{
+			printf("/");
+		}
 		printf("%s\n", pEntry->d_name);
 	}
-
-
 	// close the directory stream
 	closedir(pDir);
 
