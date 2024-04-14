@@ -11,6 +11,9 @@
 #include "gengetopt/cmdline.h"
 
 
+void print(struct dirent* pEntry, char* pathDir, bool printSlash);
+void readdir(DIR* pDir, char* pathDir, bool printSlash);
+void scandir(char* pathDir, bool printSlash);
 
 /*
 struct dirent {
@@ -22,67 +25,23 @@ struct dirent {
 };
 */
 
-enum { FMT_LONG, FMT_SHORT };
-static int format_type = FMT_LONG;
 
-static int eval_realpath(const char* given)
-{
-	char realname[_POSIX_PATH_MAX];
-	int rc = 0;
-
-	if (realpath(given, realname) == 0)
-	{
-		rc = -1;
-//		err_sysrem("failed to resolve real path name for %s\n", given);
-	}
-	else if (format_type == FMT_SHORT)
-		printf("%s\n", realname);
-	else
-		printf("%s %s\n", given, realname);
-
-	return(rc);
-}
-
-
-int main_2(void) {
-
-	eval_realpath("./");
-	eval_realpath("..");
-	eval_realpath("~/osisp");
-	eval_realpath("/home/artur/osisp");
-	eval_realpath("/home/artur/osisp/");
-
-	char buf[PATH_MAX]; /* PATH_MAX incudes the \0 so +1 is not required */
-	char* res = realpath("~/osisp", buf);
-	if (res) { // or: if (res != NULL)
-		printf("This source is at %s.\n", buf);
-	}
-	else {
-		char* errStr = strerror(errno);
-		printf("error string: %s\n", errStr);
-
-		perror("realpath");
-		exit(EXIT_FAILURE);
-	}
-	return 0;
-}
-
+struct gengetopt_args_info	config;
+bool all_flag = false;
 
 int main(int argc, char** argv)
 {
 	//=== parse command line options ===
-	struct gengetopt_args_info	config;
 
 	if (cmdline_parser(argc, argv, &config) != 0)
 	{
 		exit(1);
 	}
-	bool all_flag = false;
-
 	if (config.links_flag == false && config.dirs_flag == false && config.files_flag == false)
 	{
 		all_flag = true;
 	}
+
 	//=== open directory stream ===
 	char	pathDir_[] = "./";
 	char*	pathDir = pathDir_;
@@ -95,7 +54,7 @@ int main(int argc, char** argv)
 		return 1;
 	}
 	//=== print parameters ===
-	bool print_slash = false;
+	bool printSlash = false;
 
 	if (config.inputs_num > 0)
 	{
@@ -104,40 +63,87 @@ int main(int argc, char** argv)
 		size_t size = strlen(pathDir);
 		if (pathDir[size - 1] != '/')
 		{
-			print_slash = true;
+			printSlash = true;
 		}
 	}
 	//=== loop through the directory stream ===
-	struct dirent* pEntry;
-
-	while (( pEntry = readdir(pDir) ) != NULL)
+	if (config.sort_flag == true)
 	{
-		if (strcmp(pEntry->d_name, ".") == 0 || strcmp(pEntry->d_name, "..") == 0)
-		{
-			continue;
-		}
-		if (pEntry->d_type == DT_DIR && all_flag == false && config.dirs_flag == false)
-		{
-			continue;
-		}
-		if (pEntry->d_type == DT_REG && all_flag == false && config.files_flag == false)
-		{
-			continue;
-		}
-		if (pEntry->d_type == DT_LNK && all_flag == false && config.links_flag == false)
-		{
-			continue;
-		}
-
-		printf("%s", pathDir);
-		if (print_slash == true)
-		{
-			printf("/");
-		}
-		printf("%s\n", pEntry->d_name);
+		scandir(pathDir, printSlash);
+	}
+	else
+	{
+		readdir(pDir, pathDir, printSlash);
 	}
 	// close the directory stream
 	closedir(pDir);
 
 	return 0;
+}
+
+int filterDirEntry(const struct dirent* pEntry)
+{
+	if (strcmp(pEntry->d_name, ".") == 0 || strcmp(pEntry->d_name, "..") == 0)
+	{
+		return 0;
+	}
+	if (pEntry->d_type == DT_DIR && all_flag == false && config.dirs_flag == false)
+	{
+		return 0;
+	}
+	if (pEntry->d_type == DT_REG && all_flag == false && config.files_flag == false)
+	{
+		return 0;
+	}
+	if (pEntry->d_type == DT_LNK && all_flag == false && config.links_flag == false)
+	{
+		return 0;
+	}
+	return true;
+}
+
+void scandir(char* pathDir, bool printSlash)
+{
+	struct dirent** colEntry;
+	int count;
+
+	count = scandir(pathDir, &colEntry, &filterDirEntry, alphasort);
+	if (count < 0)
+	{ // returns -1 if an error occurs
+		perror("scandir error");
+		return;
+	}
+	for (int index = 0; index < count; index++)
+	{
+		struct dirent* pEntry;
+
+		pEntry = colEntry[index];
+		print(pEntry, pathDir, printSlash);
+
+		free(pEntry);
+	}
+	free(colEntry);
+}
+
+void readdir(DIR* pDir, char* pathDir, bool printSlash)
+{
+	struct dirent* pEntry;
+
+	while ((pEntry = readdir(pDir)) != NULL)
+	{
+		if (filterDirEntry(pEntry) > 0)
+		{
+			print(pEntry, pathDir, printSlash);
+		}
+	}
+}
+
+void print(struct dirent* pEntry, char * pathDir, bool printSlash)
+{
+	printf("%s", pathDir);
+	if (printSlash == true)
+	{
+		printf("/");
+	}
+	printf("%s\n", pEntry->d_name);
 }
